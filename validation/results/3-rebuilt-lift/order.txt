@@ -1,0 +1,9 @@
+Q=1 De=6.9 a=10µm: distance from inner wall median 193 µm (10–90%: 90–341), median |Z| 0.44
+Q=1 De=6.9 a=15µm: distance from inner wall median 139 µm (10–90%: 96–211), median |Z| 0.47
+Q=1 De=6.9 a=20µm: distance from inner wall median 99 µm (10–90%: 80–119), median |Z| 0.44
+Q=2 De=13.8 a=10µm: distance from inner wall median 222 µm (10–90%: 111–358), median |Z| 0.44
+Q=2 De=13.8 a=15µm: distance from inner wall median 150 µm (10–90%: 112–197), median |Z| 0.43
+Q=2 De=13.8 a=20µm: distance from inner wall median 110 µm (10–90%: 99–122), median |Z| 0.44
+Q=3 De=20.7 a=10µm: distance from inner wall median 237 µm (10–90%: 120–363), median |Z| 0.45
+Q=3 De=20.7 a=15µm: distance from inner wall median 155 µm (10–90%: 127–197), median |Z| 0.43
+Q=3 De=20.7 a=20µm: distance from inner wall median 114 µm (10–90%: 106–123), median |Z| 0.44

@@ -1,0 +1,1172 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Spiral Inertial Focusing</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+/* Layout: one full-bleed 3D stage with two instrument panels floating over it; panels drop below the stage on phones. */
+:root {
+  color-scheme: dark;
+  --bg-0: #05080f;
+  --bg-1: #0b1424;
+  --panel: rgba(9, 15, 27, 0.80);
+  --rule: rgba(128, 170, 215, 0.18);
+  --ink: #dce7f6;
+  --muted: #8494ad;
+  --channel: #58c7ff;
+  --rbc: #ff5a4f;
+  --wbc: #e6eaff;
+  --ctc: #46f0a0;
+  --exo: #ffc24d;
+  --f-shear: #ff8ad8;
+  --f-wall: #b69cff;
+  --f-display: "Space Grotesk", "IBM Plex Sans", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-data: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+html, body { height: 100%; }
+body {
+  background: radial-gradient(120% 90% at 50% 35%, var(--bg-1) 0%, var(--bg-0) 70%) var(--bg-0);
+  color: var(--ink);
+  font: 13px/1.45 var(--f-body);
+  overflow: hidden;
+}
+.app { position: relative; height: 100%; }
+.stage { position: absolute; inset: 0; }
+#gl { display: block; width: 100%; height: 100%; touch-action: none; }
+#labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.tag {
+  position: absolute; transform: translate(-50%, -100%);
+  font: 500 10.5px/1 var(--f-data); letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink); white-space: nowrap; padding: 4px 6px;
+  background: rgba(5, 8, 15, 0.6); border: 1px solid var(--rule); border-radius: 3px;
+}
+.panel {
+  position: absolute; top: 16px; bottom: 16px; width: 304px;
+  display: flex; flex-direction: column; gap: 14px;
+  overflow-y: auto; scrollbar-width: thin;
+  pointer-events: none;
+}
+.panel > * { pointer-events: auto; }
+.panel.left { left: max(16px, env(safe-area-inset-left, 0px)); }
+.panel.right { right: max(16px, env(safe-area-inset-right, 0px)); }
+.card {
+  background: var(--panel); border: 1px solid var(--rule); border-radius: 6px;
+  padding: 12px 14px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.titleblock { background: none; border: 0; padding: 2px 2px 0; backdrop-filter: none; -webkit-backdrop-filter: none; }
+h1 { font: 600 22px/1.15 var(--f-display); margin: 0 0 6px; letter-spacing: -0.01em; text-wrap: balance; }
+.spec { font: 400 11px/1.5 var(--f-data); color: var(--muted); margin: 0; }
+h2 {
+  font: 500 10.5px/1 var(--f-data); letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--muted); margin: 0 0 10px;
+}
+.kv { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.kv div { min-width: 0; }
+.kv b { display: block; font: 500 17px/1.1 var(--f-data); font-variant-numeric: tabular-nums; color: var(--ink); }
+.kv span { font-size: 10.5px; color: var(--muted); }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th { font: 500 10px/1.2 var(--f-data); color: var(--muted); text-align: right; padding: 0 0 6px; letter-spacing: 0.04em; }
+th:first-child, td:first-child { text-align: left; }
+td { padding: 4px 0; text-align: right; font: 400 12px/1.2 var(--f-data); }
+td:first-child { font-family: var(--f-body); }
+.sw { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; vertical-align: 0; }
+label.sp { cursor: pointer; display: inline-flex; align-items: center; }
+label.sp input { position: absolute; opacity: 0; width: 0; height: 0; }
+label.sp input:not(:checked) ~ * { opacity: 0.35; }
+label.sp input:focus-visible ~ .nm { outline: 1px solid var(--channel); outline-offset: 2px; }
+.heat th:not(:first-child) { text-align: center; width: 46px; white-space: nowrap; }
+.heat td.c { padding: 3px 0 3px 4px; }
+.heat td.c i { display: block; font-style: normal; text-align: center; padding: 4px 0; border-radius: 3px; background: rgba(88, 199, 255, calc(var(--f, 0) * 0.55 + 0.04)); }
+.note { font-size: 11px; color: var(--muted); margin: 8px 0 0; }
+.row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+.row label { font-weight: 500; }
+.row output { font: 400 12px/1 var(--f-data); color: var(--channel); font-variant-numeric: tabular-nums; }
+.ctl + .ctl { margin-top: 12px; }
+input[type=range] { width: 100%; margin: 0; accent-color: var(--channel); }
+.seg { display: flex; gap: 6px; flex-wrap: wrap; }
+button {
+  font: 500 11.5px/1 var(--f-body); color: var(--ink); cursor: pointer;
+  background: rgba(88, 199, 255, 0.06); border: 1px solid var(--rule); border-radius: 4px;
+  padding: 7px 9px; flex: 1 1 auto;
+}
+button:hover { border-color: rgba(88, 199, 255, 0.5); }
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 1px solid var(--channel); outline-offset: 2px; }
+button[aria-pressed=true] { background: rgba(88, 199, 255, 0.2); border-color: var(--channel); color: #fff; }
+#xs { display: block; width: 100%; height: auto; border-radius: 3px; touch-action: none; cursor: grab; }
+.forces { margin: 10px 0; }
+.forces td { padding: 3px 0; }
+.forces .bar { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 8px; vertical-align: 3px; }
+.xslab { display: flex; justify-content: space-between; font: 400 10px/1 var(--f-data); color: var(--muted); margin-top: 6px; letter-spacing: 0.04em; }
+details summary { cursor: pointer; font: 500 10.5px/1 var(--f-data); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+details ul { margin: 10px 0 0; padding-left: 16px; color: var(--muted); font-size: 11.5px; }
+details li + li { margin-top: 6px; }
+details li b { color: var(--ink); font-weight: 500; }
+#status { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); font: 400 11px/1 var(--f-data); color: var(--muted); letter-spacing: 0.06em; pointer-events: none; text-align: center; }
+@media (max-width: 1100px) {
+  body { overflow: auto; }
+  .app { height: auto; display: flex; flex-wrap: wrap; align-items: flex-start; }
+  .stage { position: relative; inset: auto; flex: 0 0 100%; height: 64vh; min-height: 320px; }
+  .panel { position: static; flex: 1 1 300px; min-width: 0; width: auto; overflow: visible; padding-block: 14px 20px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .panel.left { order: 2; } .stage { order: 1; } .panel.right { order: 3; }
+  #status { bottom: 10px; }
+}
+</style>
+
+<div class="app">
+  <div class="stage">
+    <canvas id="gl" aria-label="3D animation of blood cells sorting by size in a spiral microchannel"></canvas>
+    <div id="labels"></div>
+    <div id="status">Priming the channel…</div>
+  </div>
+
+  <aside class="panel left">
+    <div class="card titleblock">
+      <h1>Inertial focusing in a spiral microchannel</h1>
+      <p class="spec" id="spec">500 × 130 µm channel · 4 loops · R 3 → 8 mm · 138 mm long</p>
+    </div>
+
+    <div class="card">
+      <h2>Flow state</h2>
+      <div class="kv">
+        <div><b id="k-u">–</b><span>U, m/s</span></div>
+        <div><b id="k-re">–</b><span>Re</span></div>
+        <div><b id="k-de">–</b><span>De at station</span></div>
+        <div><b id="k-ud">–</b><span>mean U<sub>Dean</sub>, mm/s</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Particles</h2>
+      <table>
+        <thead><tr><th>click to hide</th><th>a, µm</th><th>a / h</th><th>lift : Dean</th></tr></thead>
+        <tbody id="sp-rows"></tbody>
+      </table>
+      <p class="note">Focusing is expected once a / h passes about 0.07. Lift migration scales with a³, Dean drag does not, so each size settles at a different distance from the inner wall.</p>
+    </div>
+
+    <div class="card">
+      <h2>Where each species exits, %</h2>
+      <table class="heat">
+        <thead><tr><th></th><th>1 in</th><th>2</th><th>3</th><th>4 out</th></tr></thead>
+        <tbody id="out-rows"></tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h2>Chip design</h2>
+      <div class="ctl">
+        <div class="row"><label for="d-w">Channel width</label><output id="o-d-w">500 µm</output></div>
+        <input type="range" id="d-w" min="300" max="800" step="10" value="500">
+      </div>
+      <div class="ctl">
+        <div class="row"><label for="d-h">Channel height</label><output id="o-d-h">130 µm</output></div>
+        <input type="range" id="d-h" min="60" max="200" step="5" value="130">
+      </div>
+      <div class="ctl">
+        <div class="row"><label for="d-n">Loops</label><output id="o-d-n">4</output></div>
+        <input type="range" id="d-n" min="2" max="6" step="1" value="4">
+      </div>
+      <div class="ctl">
+        <div class="row"><label for="d-r">Inner radius</label><output id="o-d-r">3.0 mm</output></div>
+        <input type="range" id="d-r" min="2.5" max="8" step="0.5" value="3">
+      </div>
+      <div class="ctl seg"><button type="button" id="d-reset">Reset to default chip</button></div>
+      <p class="note">The chip rebuilds and the flow restarts when you release a slider. Flow rate stays fixed, so a smaller cross-section means faster flow.</p>
+    </div>
+  </aside>
+
+  <aside class="panel right">
+    <div class="card">
+      <h2>View</h2>
+      <div class="seg" id="views">
+        <button type="button" data-view="chip" aria-pressed="true">Whole chip</button>
+        <button type="button" data-view="ride" aria-pressed="false">Ride the stream</button>
+        <button type="button" data-view="section" aria-pressed="false">At station</button>
+        <button type="button" data-view="outlets" aria-pressed="false">Outlets</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Cross-section at station</h2>
+      <canvas id="xs" width="552" height="240" aria-label="Channel cross-section with the forces on one tracked cell"></canvas>
+      <div class="xslab"><span>◀ inner wall</span><span id="xs-where">loop 2.0</span><span>outer wall ▶</span></div>
+      <div class="ctl" style="margin-top:10px">
+        <div class="row"><label for="station">Station along the spiral</label><output id="o-station">50%</output></div>
+        <input type="range" id="station" min="0" max="1" step="0.005" value="0.5">
+      </div>
+      <div class="ctl">
+        <div class="row"><label>Forces on one cell</label><output id="o-net">–</output></div>
+        <div class="seg" id="probe-sp">
+          <button type="button" data-probe="ctc" aria-pressed="true">Tumour</button>
+          <button type="button" data-probe="wbc" aria-pressed="false">White</button>
+          <button type="button" data-probe="rbc" aria-pressed="false">Red</button>
+        </div>
+        <table class="forces"><tbody>
+          <tr><td><span class="bar" style="background:var(--channel)"></span>Dean drag</td><td id="f-dean">–</td></tr>
+          <tr><td><span class="bar" style="background:var(--f-shear)"></span>Shear-gradient lift</td><td id="f-shear">–</td></tr>
+          <tr><td><span class="bar" style="background:var(--f-wall)"></span>Wall lift</td><td id="f-wall">–</td></tr>
+          <tr><td><span class="bar" style="background:var(--ink)"></span>Net</td><td id="f-net">–</td></tr>
+        </tbody></table>
+        <div class="seg">
+          <button type="button" id="probe-follow" aria-pressed="true">Following the cell</button>
+          <button type="button" id="probe-release">Release at inlet</button>
+        </div>
+        <p class="note">Drag the cell to read the forces anywhere in the cross-section. Arrow lengths are compressed so small forces stay visible; the numbers are the model's values.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Run conditions</h2>
+      <div class="ctl">
+        <div class="row"><label for="flow">Flow rate</label><output id="o-flow">1.75 mL/min</output></div>
+        <input type="range" id="flow" min="0.2" max="4" step="0.05" value="1.75">
+      </div>
+      <div class="ctl">
+        <div class="row"><label for="slow">Slow motion</label><output id="o-slow">1 s = 66 ms</output></div>
+        <input type="range" id="slow" min="0" max="1" step="0.01" value="0.70">
+      </div>
+      <div class="ctl">
+        <div class="row"><label for="conc">Sample concentration</label><output id="o-conc">100%</output></div>
+        <input type="range" id="conc" min="2" max="100" step="1" value="100">
+      </div>
+      <div class="ctl">
+        <div class="row"><label>Inlet</label></div>
+        <div class="seg" id="inlet">
+          <button type="button" data-inlet="sheath" aria-pressed="true">Sample + sheath</button>
+          <button type="button" data-inlet="both" aria-pressed="false">Sample in both</button>
+        </div>
+      </div>
+      <p class="note" style="margin:12px 0 10px">For the default chip the model's best setting is 1.75 mL/min (clean window about 1.60–1.85). There red and white cells finish their second Dean cycle and are back at the outer wall as they reach the outlets, while tumour cells stay focused at the inner wall. A narrower window sits near 0.9 mL/min, after one cycle. Between and beyond these, the small cells arrive out of phase.</p>
+      <div class="ctl seg">
+        <button type="button" id="pause" aria-pressed="false">Pause</button>
+        <button type="button" id="restart">Restart from empty</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <details>
+        <summary>What is and isn't modeled</summary>
+        <ul>
+          <li><b>Design sliders extrapolate.</b> The model was tuned on the 500 × 130 µm chip. Trends from changing the design are indicative, and least reliable as the channel approaches a square cross-section.</li>
+          <li><b>Geometry is to scale.</b> Cells are drawn larger than life only when the camera is too far away to resolve them.</li>
+          <li><b>Dean flow</b> is computed for the actual cross-section: the leading-order secondary flow at low Dean number, solved on a grid each time the design changes. It scales with ρU²/μR and includes the outward shift of the main flow's velocity peak. Above De ≈ 17 an estimated roll-off slows its growth toward the De<sup>1.63</sup> trend seen in full simulations.</li>
+          <li><b>Lift</b> migration velocity scales as f<sub>L</sub>ρU<sub>max</sub>²a³ / 3πμh² (Di Carlo), with f<sub>L</sub> = 0.035 at Re 50 falling as Re<sup>−0.5</sup>. That one number was chosen by scoring against Martel &amp; Toner's 2012 spiral experiments. The shape of the lift field is constructed, not simulated: it has the equilibria known for straight rectangular channels (0.6 of the half-height from the centre plane, near the middle of each wall) and acts within half a channel height of a wall.</li>
+          <li><b>Cells</b> are rigid spheres with ±10% size spread, no cell–cell interaction, plus a small random dispersion term. Red cells use their 5.6 µm volume-equivalent diameter.</li>
+          <li><b>Concentration</b> is roughly 10⁴ times lower than whole blood, and tumour cells are far more common here than in a real sample.</li>
+          <li><b>Exosomes</b> (about 100 nm, drawn enlarged) feel no meaningful lift and simply trace the Dean vortices.</li>
+        </ul>
+      </details>
+    </div>
+  </aside>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script>
+(function () {
+'use strict';
+const $ = (id) => document.getElementById(id);
+if (!window.THREE) { $('status').textContent = 'The 3D library failed to load.'; return; }
+const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ───────── Device geometry (mm) ───────── */
+let W = 0.5, H = 0.13, R0 = 3, PITCH = 1.25, LOOPS = 4;   // editable from the Chip design panel
+let DH = 2 * W * H / (W + H);                  // hydraulic diameter, mm
+let B = PITCH / (2 * Math.PI);
+let LA = 1.8, WE = 2.0; const LE = 2.5, LO = 3.5;    // inlet arms, expansion, outlet branches, expanded width
+const RHO = 1000, MU = 1e-3;
+const YS = 0.7;                                  // sample stream enters in the outer 15% of the width
+
+/* Spiral centreline tabulated at uniform arc length */
+const NT = 4096;
+const TPX = new Float32Array(NT + 1), TPZ = new Float32Array(NT + 1);
+const TNX = new Float32Array(NT + 1), TNZ = new Float32Array(NT + 1), TR = new Float32Array(NT + 1);
+let LS = 0;
+function buildSpiral() {
+  const M = 40000, thEnd = 2 * Math.PI * LOOPS, dth = thEnd / M;
+  const cum = new Float64Array(M + 1);
+  for (let k = 1; k <= M; k++) { const r = R0 + B * (k - 0.5) * dth; cum[k] = cum[k - 1] + Math.sqrt(r * r + B * B) * dth; }
+  LS = cum[M];
+  let k = 0;
+  for (let j = 0; j <= NT; j++) {
+    const s = j / NT * LS;
+    while (k < M - 1 && cum[k + 1] < s) k++;
+    const th = (k + (s - cum[k]) / (cum[k + 1] - cum[k])) * dth, r = R0 + B * th;
+    const c = Math.cos(th), sn = Math.sin(th);
+    let tx = B * c - r * sn, tz = B * sn + r * c; const tl = Math.hypot(tx, tz); tx /= tl; tz /= tl;
+    TPX[j] = r * c; TPZ[j] = r * sn; TNX[j] = tz; TNZ[j] = -tx; TR[j] = r;
+  }
+}
+let S_EXP = 0, S_OUT = 0, S_END = 0;
+
+function rotToward(vx, vz, tx, tz, ang) {
+  const c = Math.cos(ang), s = Math.sin(ang);
+  const a = [vx * c - vz * s, vx * s + vz * c], b = [vx * c + vz * s, -vx * s + vz * c];
+  return (a[0] * tx + a[1] * tz) > (b[0] * tx + b[1] * tz) ? a : b;
+}
+function perpToward(dx, dz, tx, tz) { return (dz * tx - dx * tz) > 0 ? [dz, -dx] : [-dz, dx]; }
+
+// Inlet arms: 0 = sheath (inner side, Y below YS); 1 = sample (outer side, Y above YS)
+let P0, ARMS, PE, OUTS;
+function buildEnds() {
+P0 = { x: TPX[0], z: TPZ[0], tx: -TNZ[0], tz: TNX[0], nx: TNX[0], nz: TNZ[0] };
+ARMS = [{ yc: (YS - 1) / 2, yh: (YS + 1) / 2, ang: 52 }, { yc: (YS + 1) / 2, yh: (1 - YS) / 2, ang: 14 }].map((a) => {
+  const up = rotToward(-P0.tx, -P0.tz, -P0.nx, -P0.nz, a.ang * Math.PI / 180);
+  const d = [-up[0], -up[1]], m = perpToward(d[0], d[1], P0.nx, P0.nz);
+  return { yc: a.yc, yh: a.yh, dx: d[0], dz: d[1], mx: m[0], mz: m[1],
+    jx: P0.x + P0.nx * a.yc * W / 2, jz: P0.z + P0.nz * a.yc * W / 2 };
+});
+// Outlet end of the spiral, expansion and four branches (0 = inner wall side)
+PE = { x: TPX[NT], z: TPZ[NT], tx: -TNZ[NT], tz: TNX[NT], nx: TNX[NT], nz: TNZ[NT] };
+OUTS = [0, 1, 2, 3].map((k) => {
+  const yc = -0.75 + 0.5 * k, phi = (k - 1.5) * 15 * Math.PI / 180;
+  const sg = phi >= 0 ? 1 : -1;
+  const d = rotToward(PE.tx, PE.tz, sg * PE.nx, sg * PE.nz, Math.abs(phi));
+  const m = perpToward(d[0], d[1], PE.nx, PE.nz);
+  return { yc, dx: d[0], dz: d[1], mx: m[0], mz: m[1],
+    bx: PE.x + PE.tx * LE + PE.nx * yc * WE / 2, bz: PE.z + PE.tz * LE + PE.nz * yc * WE / 2 };
+});
+}
+let HW = H / W;
+let DEAN = null;                 // computed secondary-flow field for the current cross-section
+function layout() {           // everything that follows from the design parameters
+  PITCH = W + 0.75; DH = 2 * W * H / (W + H); B = PITCH / (2 * Math.PI); HW = H / W; WE = 4 * W; LA = 0.6 * R0;
+  buildSpiral(); S_EXP = LS; S_OUT = LS + LE; S_END = LS + LE + LO; buildEnds();
+  DEAN = solveDean(W, H, Math.max(32, Math.min(160, Math.round(24 * W / H))), 24);
+}
+layout();
+const smooth = (f) => f * f * (3 - 2 * f);
+
+// Channel coordinates (s along the path, Y across the width, Z across the height, both −1…1) → world
+const _p = { x: 0, y: 0, z: 0 };
+function place(s, Y, Z, o) {
+  o = o || _p;
+  if (s < 0) {
+    const a = ARMS[Y >= YS ? 1 : 0], l = (Y - a.yc) * W / 2;
+    o.x = a.jx + a.dx * s + a.mx * l; o.z = a.jz + a.dz * s + a.mz * l;
+  } else if (s < S_EXP) {
+    const f = s / LS * NT, j = f | 0, t = f - j, l = Y * W / 2;
+    o.x = TPX[j] + (TPX[j + 1] - TPX[j]) * t + TNX[j] * l;
+    o.z = TPZ[j] + (TPZ[j + 1] - TPZ[j]) * t + TNZ[j] * l;
+  } else if (s < S_OUT) {
+    const d = s - S_EXP, l = Y * (W + (WE - W) * smooth(d / LE)) / 2;
+    o.x = PE.x + PE.tx * d + PE.nx * l; o.z = PE.z + PE.tz * d + PE.nz * l;
+  } else {
+    const k = Y < -0.5 ? 0 : Y < 0 ? 1 : Y < 0.5 ? 2 : 3, b = OUTS[k], d = s - S_OUT, l = (Y - b.yc) * WE / 2;
+    o.x = b.bx + b.dx * d + b.mx * l; o.z = b.bz + b.dz * d + b.mz * l;
+  }
+  o.y = H / 2 + Z * H / 2;
+  return o;
+}
+
+/* ───────── Flow and force model ───────── */
+// ── Flow core: Dean flow solver and lift field (shared verbatim by the page and the validation harness) ──
+// Leading-order secondary flow in a curved rectangular duct, valid at low Dean number:
+//   primary flow      ∇²u0 = −G/μ                          (straight-duct Poiseuille flow)
+//   secondary flow    μ∇⁴ψ = −(ρ/R) ∂(u0²)/∂z ,  ψ = ∂ψ/∂n = 0 on the walls,  v_y = ∂ψ/∂z, v_z = −∂ψ/∂y
+//   primary shift     μ∇²u1 = ρ (v·∇)u0                    (outward shift of the velocity peak)
+// Everything is solved once per cross-section for unit ρU²/(μR); the fields then scale linearly with it.
+// Lengths in mm. Returned fields live on an (NY+1)×(NZ+1) node grid, index i*(NZ+1)+j, Y and Z from −1 to 1.
+function solveDean(W, H, NY, NZ) {
+  const dy = W / NY, dz = H / NZ, n1 = NZ + 1, n = (NY + 1) * n1, id = (i, j) => i * n1 + j;
+  const iy2 = 1 / (dy * dy), iz2 = 1 / (dz * dz);
+  const cg = (apply, b, tol, maxIt) => {            // conjugate gradients on interior nodes
+    const x = new Float64Array(n), r = Float64Array.from(b), p = Float64Array.from(b), Ap = new Float64Array(n);
+    let rr = 0, bb = 0; for (let k = 0; k < n; k++) { rr += r[k] * r[k]; } bb = rr || 1;
+    let it = 0;
+    for (; it < maxIt && rr > tol * tol * bb; it++) {
+      apply(p, Ap); let pAp = 0; for (let k = 0; k < n; k++) pAp += p[k] * Ap[k];
+      const al = rr / pAp; let rn = 0;
+      for (let k = 0; k < n; k++) { x[k] += al * p[k]; r[k] -= al * Ap[k]; rn += r[k] * r[k]; }
+      const be = rn / rr; rr = rn; for (let k = 0; k < n; k++) p[k] = r[k] + be * p[k];
+    }
+    x.iters = it; return x;
+  };
+  const negLap = (x, out) => {                       // −∇² with x = 0 on the walls
+    out.fill(0);
+    for (let i = 1; i < NY; i++) for (let j = 1; j < NZ; j++) { const k = id(i, j);
+      out[k] = (2 * x[k] - x[k - n1] - x[k + n1]) * iy2 + (2 * x[k] - x[k - 1] - x[k + 1]) * iz2; }
+  };
+  const biharm = (x, out) => {                       // ∇⁴ with clamped walls (mirror ghost nodes)
+    out.fill(0);
+    for (let i = 1; i < NY; i++) for (let j = 1; j < NZ; j++) { const k = id(i, j), c = x[k];
+      const ym2 = i === 1 ? c : x[k - 2 * n1], yp2 = i === NY - 1 ? c : x[k + 2 * n1];
+      const zm2 = j === 1 ? c : x[k - 2], zp2 = j === NZ - 1 ? c : x[k + 2];
+      out[k] = (ym2 - 4 * x[k - n1] + 6 * c - 4 * x[k + n1] + yp2) * iy2 * iy2
+             + (zm2 - 4 * x[k - 1] + 6 * c - 4 * x[k + 1] + zp2) * iz2 * iz2
+             + 2 * iy2 * iz2 * (x[k - n1 - 1] + x[k - n1 + 1] + x[k + n1 - 1] + x[k + n1 + 1] - 2 * (x[k - n1] + x[k + n1] + x[k - 1] + x[k + 1]) + 4 * c); }
+  };
+  const interior = (f) => { const b = new Float64Array(n); for (let i = 1; i < NY; i++) for (let j = 1; j < NZ; j++) b[id(i, j)] = f(i, j); return b; };
+  const mean = (x) => {                              // trapezoid mean over the cross-section (walls are zero)
+    let s = 0; for (let i = 1; i < NY; i++) for (let j = 1; j < NZ; j++) s += x[id(i, j)]; return s / (NY * NZ); };
+  // primary flow, normalised to unit mean
+  const u0 = cg(negLap, interior(() => 1), 1e-7, 4000); { const m = mean(u0); for (let k = 0; k < n; k++) u0[k] /= m; }
+  // secondary-flow stream function per unit ρU²/(μR)
+  const psi = cg(biharm, interior((i, j) => -(u0[id(i, j + 1)] ** 2 - u0[id(i, j - 1)] ** 2) / (2 * dz)), 1e-6, 40000);
+  const vy = new Float64Array(n), vz = new Float64Array(n);
+  for (let i = 1; i < NY; i++) for (let j = 1; j < NZ; j++) { const k = id(i, j);
+    vy[k] = (psi[k + 1] - psi[k - 1]) / (2 * dz); vz[k] = -(psi[k + n1] - psi[k - n1]) / (2 * dy); }
+  // first correction to the primary flow per unit (ρ/μ)·ρU²/(μR), zero net flux
+  const u1 = cg(negLap, interior((i, j) => { const k = id(i, j);
+    return -(vy[k] * (u0[k + n1] - u0[k - n1]) / (2 * dy) + vz[k] * (u0[k + 1] - u0[k - 1]) / (2 * dz)); }), 1e-7, 4000);
+  { const m = mean(u1); for (let k = 0; k < n; k++) u1[k] -= m * u0[k]; }
+  // local shear of the primary flow, scaled so that a parabolic profile across the height gives sz = Z
+  const uc = u0[id(NY >> 1, NZ >> 1)], sy = new Float64Array(n), sz = new Float64Array(n), gY = new Float32Array(NY + 1), gZ = new Float32Array(NZ + 1);
+  for (let i = 0; i <= NY; i++) for (let j = 0; j <= NZ; j++) { const k = id(i, j);
+    const dudy = i === 0 ? (u0[k + n1] - u0[k]) / dy : i === NY ? (u0[k] - u0[k - n1]) / dy : (u0[k + n1] - u0[k - n1]) / (2 * dy);
+    const dudz = j === 0 ? (u0[k + 1] - u0[k]) / dz : j === NZ ? (u0[k] - u0[k - 1]) / dz : (u0[k + 1] - u0[k - 1]) / (2 * dz);
+    sy[k] = -(H / 2) * dudy / (2 * uc); sz[k] = -(H / 2) * dudz / (2 * uc); }
+  for (let i = 0; i <= NY; i++) gY[i] = u0[id(i, NZ >> 1)] / uc;
+  for (let j = 0; j <= NZ; j++) gZ[j] = u0[id(NY >> 1, j)] / uc;
+  let vAvg = 0, vOut = 0, pk = 0, coreY = 0, coreZ = 0, uMax = 0;
+  for (let i = 1; i < NY; i++) for (let j = 1; j < NZ; j++) { const k = id(i, j);
+    vAvg += Math.hypot(vy[k], vz[k]); if (vy[k] > vOut) vOut = vy[k]; if (u0[k] > uMax) uMax = u0[k];
+    if (psi[k] > pk) { pk = psi[k]; coreY = -1 + 2 * i / NY; coreZ = -1 + 2 * j / NZ; } }
+  return { NY, NZ, u0: Float32Array.from(u0), u1: Float32Array.from(u1), vy: Float32Array.from(vy), vz: Float32Array.from(vz), psi: Float32Array.from(psi), sy: Float32Array.from(sy), sz: Float32Array.from(sz), gY, gZ,
+    vAvg: vAvg / (NY * NZ), vOut, psiMax: pk, coreY, coreZ, uMax, iters: psi.iters };
+}
+// Bilinear sample of the fields at (Y, Z) in −1…1; writes o.vy, o.vz (mm² per unit ρU²/μR), o.u0, o.u1, o.sy, o.sz, o.g, o.gz
+function sampleDean(F, Y, Z, o) {
+  let fy = (Y + 1) * 0.5 * F.NY, fz = (Z + 1) * 0.5 * F.NZ;
+  if (fy < 0) fy = 0; else if (fy > F.NY - 1e-6) fy = F.NY - 1e-6; if (fz < 0) fz = 0; else if (fz > F.NZ - 1e-6) fz = F.NZ - 1e-6;
+  const i = fy | 0, j = fz | 0, a = fy - i, b = fz - j, n1 = F.NZ + 1, k = i * n1 + j;
+  const w00 = (1 - a) * (1 - b), w01 = (1 - a) * b, w10 = a * (1 - b), w11 = a * b;
+  o.vy = w00 * F.vy[k] + w01 * F.vy[k + 1] + w10 * F.vy[k + n1] + w11 * F.vy[k + n1 + 1];
+  o.vz = w00 * F.vz[k] + w01 * F.vz[k + 1] + w10 * F.vz[k + n1] + w11 * F.vz[k + n1 + 1];
+  o.u0 = w00 * F.u0[k] + w01 * F.u0[k + 1] + w10 * F.u0[k + n1] + w11 * F.u0[k + n1 + 1];
+  o.u1 = w00 * F.u1[k] + w01 * F.u1[k + 1] + w10 * F.u1[k + n1] + w11 * F.u1[k + n1 + 1];
+  o.sy = w00 * F.sy[k] + w01 * F.sy[k + 1] + w10 * F.sy[k + n1] + w11 * F.sy[k + n1 + 1];
+  o.sz = w00 * F.sz[k] + w01 * F.sz[k + 1] + w10 * F.sz[k + n1] + w11 * F.sz[k + n1 + 1];
+  o.g = F.gY[i] + a * (F.gY[i + 1] - F.gY[i]); o.gz = F.gZ[j] + b * (F.gZ[j + 1] - F.gZ[j]);
+}
+// Above De ≈ 17 Dean's low-curvature series stops converging and the secondary flow grows more slowly than De².
+// This roll-off tends to the De^1.63 growth reported by full simulations; its exact form is an estimate.
+const DE_C = 17;
+function deanRollOff(De) { return Math.pow(1 + (De / DE_C) * (De / DE_C), -0.185); }
+// Inertial lift, as a migration velocity. Scale (Di Carlo 2009): f_L ρ U_max² a³ / (3π μ h²), with h the channel height.
+// f_L = 0.035 at Re_h = 50, falling as Re^−0.5. The value was chosen from 0.02, 0.035 and 0.07 by scoring against
+// Martel & Toner (2012); it sits inside the 0.02–0.05 range usually quoted for this coefficient.
+const LIFT = { FL0: 0.035, RE_L: 50, RE_EXP: -0.5, ZEQ: 0.6, ZETA0: 0.45, BETA: 0.1 };
+const LZN = 1 / (0.385 * LIFT.ZEQ * LIFT.ZEQ * LIFT.ZEQ);
+function liftScale(U, uMaxRatio, H, aUm) {      // mm/s; U in m/s, H in mm, a in µm
+  const Um = U * uMaxRatio, ReH = 1000 * Um * H * 1e-3 / 1e-3, a = aUm * 1e-6;
+  return 1000 * LIFT.FL0 * Math.pow(ReH / LIFT.RE_L, LIFT.RE_EXP) * 1000 * Um * Um * a * a * a / (3 * Math.PI * 1e-3 * H * H * 1e-6);
+}
+// Shape of the lift field at a sampled point d (from sampleDean), per unit liftScale. It is built to have the equilibria
+// reported for straight rectangular ducts: an unstable centre, stable points near the face centres at 0.6 of the
+// half-height, and saddles near the corners. Two contributions in each direction:
+//   shear-gradient lift  follows the local velocity gradient toward the walls, and reverses weakly (BETA) beside a wall,
+//                        which is the slow second-stage drift toward the face centres
+//   wall lift            pushes away from a wall, within half a channel height of it
+// Writes o.shy, o.shz (shear-gradient) and o.wy, o.wz (wall).
+function liftShape(Y, Z, d, W, H, o) {
+  const aY = Y < 0 ? -Y : Y, zeta = Math.max(0, 1 - (1 - aY) * W / H), zs = Y < 0 ? -zeta : zeta;
+  const B = LIFT.BETA, ZEQ = LIFT.ZEQ, mz = Math.max(-B, 1 - (1 + B) * (zeta / LIFT.ZETA0) * (zeta / LIFT.ZETA0)), my = Math.max(-B, 1 - (1 + B) * (Z / ZEQ) * (Z / ZEQ));
+  o.shz = LZN * ZEQ * ZEQ * d.g * d.sz * mz; o.wz = -LZN * d.g * d.g * Z * Z * Z;
+  o.shy = LZN * ZEQ * ZEQ * d.gz * d.sy * my; o.wy = -LZN * d.gz * d.gz * zs * zs * zs;
+}
+// ── end flow core ─────────────────────────────────────────────────────────────────────────────────────
+
+const flow = { Q: 1.75, U: 0, Re: 0, CL: 0 };
+const UDT = new Float32Array(NT + 1);            // local Dean speed averaged over the cross-section, mm/s
+const KD = new Float32Array(NT + 1);             // local ρU²/(μR) with roll-off: multiplies the solver's secondary-flow field
+const EP = new Float32Array(NT + 1);             // local weight of the outward shift of the primary flow
+const _d = { vy: 0, vz: 0, u0: 0, u1: 0 };
+const _l = { shy: 0, shz: 0, wy: 0, wz: 0 };
+let hStable = 1.5e-4;                          // largest stable sub-step for the stiffest cell
+function setFlow(Q) {
+  flow.Q = Q;
+  flow.U = Q * 1.6667e-8 / (W * H * 1e-6);       // m/s
+  flow.Re = RHO * flow.U * DH * 1e-3 / MU;
+  for (let j = 0; j <= NT; j++) {
+    const De = flow.Re * Math.sqrt(DH / (2 * TR[j])), roll = deanRollOff(De), kd = RHO * flow.U * flow.U / (MU * TR[j] * 1e-3);
+    KD[j] = roll * kd * 1e-3; EP[j] = roll * (RHO / MU) * kd * 1e-9; UDT[j] = KD[j] * DEAN.vAvg;
+  }
+  for (let i = 0; i < N; i++) UL[i] = liftVel(A[i]);
+  hStable = Math.min(1.5e-4, 0.6 / (liftVel(26) * LZN * 3 * 2 / H + 1e-9));
+}
+function liftVel(aUm) { return liftScale(flow.U, DEAN.uMax, H, aUm); }
+
+/* ───────── Particles ───────── */
+const TYPES = [
+  { key: 'exo', name: 'Exosomes', a: 0.1, n: 12000, D: 2e-5, css: '--exo', col: 0xffc24d, win: 0.35 },
+  { key: 'rbc', name: 'Red cells', a: 5.6, n: 9000, D: 1e-4, css: '--rbc', col: 0xff5a4f, win: 0.6 },
+  { key: 'wbc', name: 'White cells', a: 12, n: 900, D: 1e-4, css: '--wbc', col: 0xe6eaff, win: 2.5 },
+  { key: 'ctc', name: 'Tumour cells', a: 20, n: 64, D: 1e-4, css: '--ctc', col: 0x46f0a0, win: 9 },
+];
+let primeT = 1;
+let N = 0; TYPES.forEach((t, k) => { t.id = k; t.off = N; N += t.n; t.show = true; });
+const S = new Float32Array(N), Yv = new Float32Array(N), Zv = new Float32Array(N), A = new Float32Array(N);
+const UL = new Float32Array(N), WAIT = new Float32Array(N), TY = new Uint8Array(N);
+const AX = new Float32Array(N), AY = new Float32Array(N), AZ = new Float32Array(N), PH = new Float32Array(N), OM = new Float32Array(N);
+const tally = TYPES.map(() => [0, 0, 0, 0]);
+let inletMode = 'sheath';
+const gauss = () => (Math.random() + Math.random() + Math.random() + Math.random() - 2) * 0.866 * 2 / 1.732;
+function respawn(i) {
+  S[i] = -LA;
+  Yv[i] = inletMode === 'sheath' ? YS + 0.02 + (0.96 - YS) * Math.random() : -0.97 + 1.94 * Math.random();
+  if (inletMode !== 'sheath' && Math.abs(Yv[i] - YS) < 0.02) Yv[i] = YS - 0.05;
+  Zv[i] = (2 * Math.random() - 1) * 0.88;
+}
+function seed(empty) {
+  const T = (LA + LS) / (flow.U * 1000) * 1.25; primeT = T * 1.15;
+  for (const t of TYPES) for (let i = t.off; i < t.off + t.n; i++) {
+    TY[i] = t.id;
+    A[i] = t.a * Math.max(0.7, Math.min(1.3, 1 + 0.1 * gauss()));
+    UL[i] = liftVel(A[i]);
+    let ax = Math.random() - 0.5, ay = Math.random() - 0.5, az = Math.random() - 0.5; const l = Math.hypot(ax, ay, az) || 1;
+    AX[i] = ax / l; AY[i] = ay / l; AZ[i] = az / l; PH[i] = Math.random() * 6.283; OM[i] = 120 + 260 * Math.random();
+    respawn(i); WAIT[i] = Math.random() * T + (empty ? 0 : 0);
+  }
+  applyConc();
+  for (const r of tally) r.fill(0);
+}
+// Sample concentration: park a share of every species so individual paths are easier to follow
+let conc = 1;
+const MIN_N = { exo: 150, rbc: 100, wbc: 20, ctc: 8 };
+function applyConc() {
+  const T = (LA + LS) / (flow.U * 1000);
+  for (const t of TYPES) {
+    t.act = Math.min(t.n, Math.max(MIN_N[t.key] || 0, Math.round(t.n * conc)));
+    for (let i = t.off; i < t.off + t.n; i++) {
+      if (i - t.off >= t.act) WAIT[i] = 1e9;
+      else if (WAIT[i] > 1e8) { respawn(i); WAIT[i] = Math.random() * T; }
+    }
+  }
+}
+
+function step(dt, hmax) {
+  const nsub = Math.max(1, Math.min(80, Math.ceil(dt / hmax))), h = dt / nsub;
+  const Umm = flow.U * 1000, umin = 0.04 * Umm, iw = 2 / W, ih = 2 / H, inv = NT / LS;
+  for (let i = 0; i < N; i++) {
+    if (WAIT[i] > 0) { WAIT[i] -= dt; continue; }
+    let s = S[i], Y = Yv[i], Z = Zv[i];
+    const ul = UL[i], ty = TYPES[TY[i]], sig = Math.sqrt(2 * ty.D * h) * 3.4641;
+    const ymax = 1 - A[i] * 1e-3 / W, zmax = 1 - A[i] * 1e-3 / H;
+    for (let k = 0; k < nsub; k++) {
+      if (s >= 0 && s < S_EXP) {
+        const j = (s * inv) | 0, R = TR[j];
+        sampleDean(DEAN, Y, Z, _d);
+        let vy = KD[j] * _d.vy, vz = KD[j] * _d.vz;
+        let u = Umm * (_d.u0 + EP[j] * _d.u1); if (u < umin) u = umin;
+        if (ul > 1e-4) { liftShape(Y, Z, _d, W, H, _l); vy += ul * (_l.shy + _l.wy); vz += ul * (_l.shz + _l.wz); }
+        Y += vy * h * iw + (Math.random() - 0.5) * sig * iw;
+        Z += vz * h * ih + (Math.random() - 0.5) * sig * ih;
+        if (Y > ymax) Y = ymax; else if (Y < -ymax) Y = -ymax;
+        if (Z > zmax) Z = zmax; else if (Z < -zmax) Z = -zmax;
+        s += u * h * R / (R + Y * W * 0.5);
+      } else {
+        let yl, sc = 1;
+        if (s < 0) { const a = ARMS[Y >= YS ? 1 : 0]; yl = (Y - a.yc) / a.yh; }
+        else if (s < S_OUT) { yl = Y; sc = W / (W + (WE - W) * smooth((s - S_EXP) / LE)); }
+        else { yl = (Y - (Y < -0.5 ? -0.75 : Y < 0 ? -0.25 : Y < 0.5 ? 0.25 : 0.75)) * 4; sc = 0.25; }
+        const y4 = yl * yl * yl * yl;
+        let u = Umm * 1.6875 * (1 - y4 * y4) * (1 - Z * Z); if (u < umin) u = umin;
+        s += u * sc * h;
+        if (s >= S_END) break;
+      }
+    }
+    if (s >= S_END) {
+      tally[TY[i]][Y < -0.5 ? 0 : Y < 0 ? 1 : Y < 0.5 ? 2 : 3]++;
+      respawn(i);
+    } else { S[i] = s; Yv[i] = Y; Zv[i] = Z; }
+  }
+}
+
+/* ───────── Renderer and scene ───────── */
+const canvas = $('gl'), stage = canvas.parentElement;
+let renderer;
+try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' }); }
+catch (e) { $('status').textContent = 'This browser could not start WebGL.'; return; }
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.setClearColor(0x000000, 0);
+// Post-processing works in linear light and converts once at the end, so hand-written shader colours are linearised to match.
+const usePost = !!(THREE.EffectComposer && THREE.RenderPass && THREE.ShaderPass && THREE.UnrealBloomPass && THREE.WebGLMultisampleRenderTarget && renderer.capabilities.isWebGL2);
+const lin = (hex) => { const c = new THREE.Color(hex); return usePost ? c.convertSRGBToLinear() : c; };
+const scene = new THREE.Scene();
+scene.background = lin(0x060a12);
+(function buildEnvironment() {      // soft light panels for reflections on the glass and the cells
+  try {
+    const env = new THREE.Scene(); env.background = new THREE.Color(0x04070c);
+    const panel = (w, h, col, k, x, y, z) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(col).multiplyScalar(k), side: THREE.DoubleSide }));
+      m.position.set(x, y, z); m.lookAt(0, 0, 0); env.add(m);
+    };
+    panel(16, 16, 0xdfeaff, 2.2, -10, 30, -14); panel(46, 9, 0x58c7ff, 3, -34, 9, -12); panel(30, 12, 0xfff0dd, 3.5, 26, 14, 28); panel(50, 5, 0x9fb8ff, 1.5, 6, 5, -38);
+    const pm = new THREE.PMREMGenerator(renderer); scene.environment = pm.fromScene(env, 0.03).texture; pm.dispose();
+  } catch (e) { /* reflections are optional */ }
+})();
+const camera = new THREE.PerspectiveCamera(34, 1, 0.02, 400);
+const CHIP_C = new THREE.Vector3(1.6, 0, 0.6);
+camera.position.set(1.6, 27, 17);
+const controls = new THREE.OrbitControls(camera, canvas);
+controls.target.copy(CHIP_C); controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.minDistance = 0.25; controls.maxDistance = 170; controls.maxPolarAngle = Math.PI * 0.495;
+controls.zoomSpeed = 1.1; controls.autoRotate = !reduceMotion; controls.autoRotateSpeed = 0.35;
+controls.addEventListener('start', () => { controls.autoRotate = false; tween = null; });
+
+scene.add(new THREE.HemisphereLight(0xcfe6ff, 0x0a1020, 0.5));
+const sun = new THREE.DirectionalLight(0xffffff, 0.95); sun.position.set(6, 14, 7); scene.add(sun);
+const rim = new THREE.DirectionalLight(0x58c7ff, 0.45); rim.position.set(-9, 5, -7); scene.add(rim);
+
+let composer = null, bloom = null;
+if (usePost) {
+  try {
+    const rt = new THREE.WebGLMultisampleRenderTarget(4, 4, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat });
+    composer = new THREE.EffectComposer(renderer, rt);
+    composer.addPass(new THREE.RenderPass(scene, camera));
+    bloom = new THREE.UnrealBloomPass(new THREE.Vector2(4, 4), 0.45, 0.5, 0.78); composer.addPass(bloom);
+    composer.addPass(new THREE.ShaderPass({
+      uniforms: { tDiffuse: { value: null } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: [
+        'uniform sampler2D tDiffuse; varying vec2 vUv;',
+        'void main(){',
+        '  vec3 c = texture2D(tDiffuse, vUv).rgb;',
+        '  c *= mix(1.0, 0.5, smoothstep(0.38, 0.9, distance(vUv, vec2(0.5))));',     // vignette
+        '  c = c / (1.0 + 0.12 * c);',                                                  // gentle highlight roll-off
+        '  gl_FragColor = vec4(pow(max(c, 0.0), vec3(1.0 / 2.2)), 1.0);',
+        '}'].join('\n'),
+    }));
+  } catch (e) { composer = null; }
+}
+
+let benchMat = null;
+/* Lab bench under the chip: faint 5 mm grid and a soft contact shadow */
+(function () {
+  const m = new THREE.ShaderMaterial({
+    uniforms: { uHf: { value: new THREE.Vector2(14, 12) }, uBg: { value: lin(0x060a12) }, uCol: { value: lin(0x080d16) }, uLine: { value: lin(0x16283f) } },
+    vertexShader: 'varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+    fragmentShader: [
+      'uniform vec3 uBg, uCol, uLine; uniform vec2 uHf; varying vec3 vW;',
+      'void main(){',
+      '  vec2 g = vW.xz / 5.0; vec2 a = abs(fract(g - 0.5) - 0.5) / (fwidth(g) + 1e-5);',
+      '  float line = 1.0 - min(min(a.x, a.y), 1.0);',
+      '  vec2 q = abs(vW.xz - vec2(1.5, 0.5)) - uHf;',
+      '  float sd = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);',
+      '  float shadow = 1.0 - 0.6 * smoothstep(4.0, -1.5, sd);',
+      '  float fade = smoothstep(75.0, 16.0, length(vW.xz - vec2(1.5, 0.5)));',
+      '  gl_FragColor = vec4(mix(uBg, (uCol + uLine * line) * shadow, fade), 1.0);',
+      '}'].join('\n'),
+  });
+  m.extensions = { derivatives: true }; benchMat = m;
+  const bench = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), m); bench.rotation.x = -Math.PI / 2; bench.position.y = -1.04; scene.add(bench);
+})();
+// Glass and PDMS: clear when you look straight through, brighter toward grazing angles
+const glassMat = (col, base, side, edge) => new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, side: side || THREE.FrontSide,
+  uniforms: { uCol: { value: lin(col) }, uBase: { value: base }, uEdge: { value: edge === undefined ? 0.5 : edge } },
+  vertexShader: 'varying vec3 vN; varying vec3 vV; void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalMatrix * normal; vV = -mv.xyz; gl_Position = projectionMatrix * mv; }',
+  fragmentShader: 'uniform vec3 uCol; uniform float uBase; uniform float uEdge; varying vec3 vN; varying vec3 vV; void main(){ float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 3.0); gl_FragColor = vec4(uCol, uBase + uEdge * f); }',
+});
+
+/* Channel surfaces */
+const surf = { floor: [], ceil: [], wall: [] }, uvs = { floor: [], ceil: [], wall: [] }, edge = [];
+function quad(dst, uvd, a, b, c, d, s0, s1) {
+  dst.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], a[0], a[1], a[2], c[0], c[1], c[2], d[0], d[1], d[2]);
+  uvd.push(s0, 0, s1, 0, s1, 1, s0, 0, s1, 1, s0, 1);
+}
+function ribbon(samples) {      // samples: [cx, cz, nx, nz, halfWidth, s]
+  for (let j = 0; j < samples.length - 1; j++) {
+    const p = samples[j], q = samples[j + 1];
+    const pi = [p[0] - p[2] * p[4], p[1] - p[3] * p[4]], po = [p[0] + p[2] * p[4], p[1] + p[3] * p[4]];
+    const qi = [q[0] - q[2] * q[4], q[1] - q[3] * q[4]], qo = [q[0] + q[2] * q[4], q[1] + q[3] * q[4]];
+    quad(surf.floor, uvs.floor, [pi[0], 0, pi[1]], [qi[0], 0, qi[1]], [qo[0], 0, qo[1]], [po[0], 0, po[1]], p[5], q[5]);
+    quad(surf.ceil, uvs.ceil, [pi[0], H, pi[1]], [qi[0], H, qi[1]], [qo[0], H, qo[1]], [po[0], H, po[1]], p[5], q[5]);
+    quad(surf.wall, uvs.wall, [pi[0], 0, pi[1]], [qi[0], 0, qi[1]], [qi[0], H, qi[1]], [pi[0], H, pi[1]], p[5], q[5]);
+    quad(surf.wall, uvs.wall, [po[0], 0, po[1]], [qo[0], 0, qo[1]], [qo[0], H, qo[1]], [po[0], H, po[1]], p[5], q[5]);
+    for (const y of [0, H]) edge.push(pi[0], y, pi[1], qi[0], y, qi[1], po[0], y, po[1], qo[0], y, qo[1]);
+  }
+}
+function buildChannel() {
+  for (const k in surf) { surf[k].length = 0; uvs[k].length = 0; } edge.length = 0;
+  const sp = [];
+  for (let j = 0; j <= NT; j += 2) sp.push([TPX[j], TPZ[j], TNX[j], TNZ[j], W / 2, j / NT * LS]);
+  ribbon(sp);
+  const ex = [];
+  for (let j = 0; j <= 16; j++) { const d = j / 16 * LE; ex.push([PE.x + PE.tx * d, PE.z + PE.tz * d, PE.nx, PE.nz, (W + (WE - W) * smooth(j / 16)) / 2, LS + d]); }
+  ribbon(ex);
+  for (const b of OUTS) ribbon([[b.bx, b.bz, b.mx, b.mz, WE / 8, S_OUT], [b.bx + b.dx * LO, b.bz + b.dz * LO, b.mx, b.mz, WE / 8, S_END]]);
+  for (const a of ARMS) ribbon([[a.jx - a.dx * LA, a.jz - a.dz * LA, a.mx, a.mz, a.yh * W / 2, -LA], [a.jx, a.jz, a.mx, a.mz, a.yh * W / 2, 0]]);
+}
+buildChannel();
+function surfMesh(name, color, alpha, lineAlpha) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(surf[name], 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs[name], 2));
+  const m = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    uniforms: { uCol: { value: lin(color) }, uA: { value: alpha }, uL: { value: lineAlpha } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: [
+      'uniform vec3 uCol; uniform float uA; uniform float uL; varying vec2 vUv;',
+      'void main(){',
+      '  float fw = fwidth(vUv.x) + 1e-5;',
+      '  float d = abs(fract(vUv.x * 2.0 - 0.5) - 0.5) / (fw * 2.0);',   // a tick every 0.5 mm of path
+      '  float line = (1.0 - min(d, 1.0)) * smoothstep(0.03, 0.006, fw);',
+      '  gl_FragColor = vec4(uCol + line * 0.5, uA + line * uL);',
+      '}'].join('\n'),
+  });
+  m.extensions = { derivatives: true };
+  const mesh = new THREE.Mesh(g, m); mesh.renderOrder = 2; scene.add(mesh); return mesh;
+}
+const chan = { floor: surfMesh('floor', 0x0d2a4a, 0.55, 0.18), wall: surfMesh('wall', 0x58c7ff, 0.16, 0.25), ceil: surfMesh('ceil', 0x58c7ff, 0.035, 0.0) };
+const edgeLine = (function () {
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(edge, 3));
+  const l = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0x58c7ff, transparent: true, opacity: 0.55, depthWrite: false }));
+  l.renderOrder = 3; scene.add(l); return l;
+})();
+function refreshChannel() {
+  buildChannel();
+  for (const k in chan) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(surf[k], 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs[k], 2));
+    chan[k].geometry.dispose(); chan[k].geometry = g;
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(edge, 3));
+  edgeLine.geometry.dispose(); edgeLine.geometry = g;
+}
+
+/* Chip body, ports and labels */
+const labels = [];
+const chipGroup = new THREE.Group(); scene.add(chipGroup);
+function buildChip() {
+  while (chipGroup.children.length) { const o = chipGroup.children.pop(); if (o.geometry) o.geometry.dispose(); }
+  for (let k = labels.length - 1; k >= 0; k--) if (labels[k].port) { labels[k].el.remove(); labels.splice(k, 1); }
+  const Ro = TR[NT], zHi = Math.max(Ro + 2.8, 8.2);
+  if (benchMat) benchMat.uniforms.uHf.value.set(Ro + 6, (Ro + 3.5 + zHi + 1.7) / 2);
+  const slab = (x0, x1, y0, y1, z0, z1, col, fill, line, edge) => {
+    const g = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0);
+    const m = new THREE.Mesh(g, glassMat(col, fill, THREE.FrontSide, edge));
+    m.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); m.renderOrder = 1; chipGroup.add(m);
+    const e = new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: line, depthWrite: false }));
+    e.position.copy(m.position); chipGroup.add(e);
+  };
+  slab(-(Ro + 4.5), Ro + 7.5, -1.0, -0.004, -(Ro + 3.5), zHi + 1.7, 0xcfe4f7, 0.025, 0.22, 0.1);   // glass slide
+  slab(-(Ro + 2.2), Ro + 5.2, H + 0.004, 1.5, -(Ro + 1.8), zHi, 0xb7d6f0, 0.03, 0.2, 0.4); // PDMS
+  const portMat = new THREE.MeshBasicMaterial({ color: 0x58c7ff, transparent: true, opacity: 0.1, side: THREE.DoubleSide, depthWrite: false });
+  const tubeMat = glassMat(0xd8ecff, 0.04, THREE.DoubleSide);
+  const ringMat = new THREE.LineBasicMaterial({ color: 0x58c7ff, transparent: true, opacity: 0.6, depthWrite: false });
+  const port = (x, z, text) => {
+    const c = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 1.5, 28, 1, true), portMat); c.position.set(x, 0.75, z); c.renderOrder = 2; chipGroup.add(c);
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 4.2, 24, 1, true), tubeMat); tube.position.set(x, 1.5 + 2.1, z); tube.renderOrder = 2; chipGroup.add(tube);
+    for (const y of [0, 1.5]) {
+      const pts = []; for (let k = 0; k <= 40; k++) pts.push(new THREE.Vector3(x + 0.42 * Math.cos(k / 40 * 6.2832), y, z + 0.42 * Math.sin(k / 40 * 6.2832)));
+      chipGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), ringMat));
+    }
+    const el = document.createElement('div'); el.className = 'tag'; el.textContent = text; $('labels').appendChild(el);
+    labels.push({ el, port: true, v: new THREE.Vector3(x, 1.9, z) });
+  };
+  ARMS.forEach((a, k) => port(a.jx - a.dx * (LA + 0.3), a.jz - a.dz * (LA + 0.3), k ? 'Sample' : 'Sheath'));
+  OUTS.forEach((b, k) => port(b.bx + b.dx * (LO + 0.3), b.bz + b.dz * (LO + 0.3), ['1 · inner', '2', '3', '4 · outer'][k]));
+}
+buildChip();
+
+/* Station marker */
+const stationLine = new THREE.LineLoop(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(12), 3)),
+  new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, depthTest: false }));
+stationLine.renderOrder = 6; stationLine.frustumCulled = false; scene.add(stationLine);
+let stationS = LS * 0.5;
+const stationPin = new THREE.Line(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(6), 3)),
+  new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, depthTest: false }));
+stationPin.frustumCulled = false; scene.add(stationPin);
+const stationTag = (function () { const el = document.createElement('div'); el.className = 'tag'; el.textContent = 'Station'; $('labels').appendChild(el); const l = { el, v: new THREE.Vector3() }; labels.push(l); return l; })();
+const st = { x: 0, z: 0, nx: 0, nz: 0, tx: 0, tz: 0 };
+function setStation(f) {
+  stationS = Math.max(0.001, Math.min(0.999, f)) * LS;
+  const j = Math.round(stationS / LS * NT);
+  st.x = TPX[j]; st.z = TPZ[j]; st.nx = TNX[j]; st.nz = TNZ[j]; st.tx = -TNZ[j]; st.tz = TNX[j];
+  const a = stationLine.geometry.attributes.position, hw = W / 2 + 0.035;
+  a.setXYZ(0, st.x - st.nx * hw, -0.035, st.z - st.nz * hw); a.setXYZ(1, st.x + st.nx * hw, -0.035, st.z + st.nz * hw);
+  a.setXYZ(2, st.x + st.nx * hw, H + 0.035, st.z + st.nz * hw); a.setXYZ(3, st.x - st.nx * hw, H + 0.035, st.z - st.nz * hw);
+  a.needsUpdate = true;
+  stationTag.v.set(st.x, 1.9, st.z);
+  const q = stationPin.geometry.attributes.position; q.setXYZ(0, st.x, H, st.z); q.setXYZ(1, st.x, 1.9, st.z); q.needsUpdate = true;
+}
+
+/* Particle meshes */
+const shared = { uHalfH: { value: 400 } };
+function cellMaterial(opts, minPx) {
+  const m = new THREE.MeshPhysicalMaterial(Object.assign({ clearcoat: 0.3, clearcoatRoughness: 0.35, envMapIntensity: 0.3 }, opts));
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uHalfH = shared.uHalfH; sh.uniforms.uMinPx = { value: minPx };
+    sh.vertexShader = 'uniform float uHalfH; uniform float uMinPx;\n' + sh.vertexShader.replace('#include <begin_vertex>', [
+      '#include <begin_vertex>',
+      '#ifdef USE_INSTANCING',
+      '  vec4 mvC = modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);',
+      '  float pxR = length(instanceMatrix[0].xyz) * projectionMatrix[1][1] * uHalfH / max(-mvC.z, 1e-4);',
+      '  transformed *= max(1.0, uMinPx / max(pxR, 1e-4));',   // keep cells visible when the camera is far
+      '#endif'].join('\n'));
+  };
+  return m;
+}
+function lumpy(detailW, detailH, amp) {
+  const g = new THREE.SphereGeometry(1, detailW, detailH), p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const k = 1 + amp * (Math.sin(4.1 * x + 1.3) * Math.sin(3.7 * y + 0.7) * Math.sin(4.4 * z + 2.1) + 0.5 * Math.sin(8 * x * y + 3 * z));
+    p.setXYZ(i, x * k, y * k, z * k);
+  }
+  g.computeVertexNormals(); return g;
+}
+const rbcGeo = new THREE.LatheGeometry([[0, -0.1], [0.3, -0.14], [0.6, -0.26], [0.82, -0.3], [0.96, -0.2], [1, 0], [0.96, 0.2], [0.82, 0.3], [0.6, 0.26], [0.3, 0.14], [0, 0.1]].map((q) => new THREE.Vector2(q[0], q[1])), 12);
+const dpr = renderer.getPixelRatio();
+const T_EXO = TYPES[0], T_RBC = TYPES[1], T_WBC = TYPES[2], T_CTC = TYPES[3];
+function inst(t, geo, mat, radius) {
+  const m = new THREE.InstancedMesh(geo, mat, t.n); m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.frustumCulled = false;
+  t.mesh = m; t.rad = radius; scene.add(m);
+}
+inst(T_RBC, rbcGeo, cellMaterial({ color: 0xd9281e, roughness: 0.45, metalness: 0.0, emissive: 0x9a160f, envMapIntensity: 0.15 }, 1.3 * dpr), (a) => a * 0.5e-3 * 1.43);
+inst(T_WBC, lumpy(16, 12, 0.05), cellMaterial({ color: 0xd4d9f0, roughness: 0.6, emissive: 0x262a3c, clearcoat: 0.2 }, 1.7 * dpr), (a) => a * 0.5e-3);
+inst(T_CTC, lumpy(28, 20, 0.09), cellMaterial({ color: 0x35d98c, roughness: 0.4, emissive: 0x128a52 }, 2.6 * dpr), (a) => a * 0.5e-3);
+
+function pointCloud(n, color, world, minPx, alpha) {
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage));
+  const m = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    uniforms: { uHalfH: shared.uHalfH, uCol: { value: lin(color) }, uWorld: { value: world }, uMin: { value: minPx }, uA: { value: alpha } },
+    vertexShader: 'uniform float uHalfH, uWorld, uMin; void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mv; gl_PointSize = max(uMin, uWorld * projectionMatrix[1][1] * uHalfH / max(-mv.z, 1e-4)); }',
+    fragmentShader: 'uniform vec3 uCol; uniform float uA; void main(){ float r = length(gl_PointCoord - 0.5) * 2.0; float a = smoothstep(1.0, 0.0, r); gl_FragColor = vec4(uCol, a * a * uA); }',
+  });
+  const p = new THREE.Points(g, m); p.frustumCulled = false; p.renderOrder = 5; scene.add(p); return p;
+}
+T_EXO.mesh = pointCloud(T_EXO.n, 0xffc24d, 0.007, 1.8 * dpr, 0.6);
+const halo = pointCloud(T_CTC.n, 0x46f0a0, 0.075, 13 * dpr, 0.5);
+
+let simT = 0;
+function writeScene() {
+  const o = _p;
+  { // exosomes
+    const p = T_EXO.mesh.geometry.attributes.position.array;
+    for (let i = T_EXO.off, q = 0; i < T_EXO.off + T_EXO.n; i++, q += 3) {
+      if (WAIT[i] > 0) { p[q] = 0; p[q + 1] = -500; p[q + 2] = 0; continue; }
+      place(S[i], Yv[i], Zv[i], o); p[q] = o.x; p[q + 1] = o.y; p[q + 2] = o.z;
+    }
+    T_EXO.mesh.geometry.attributes.position.needsUpdate = true;
+  }
+  const hp = halo.geometry.attributes.position.array;
+  for (const t of [T_RBC, T_WBC, T_CTC]) {
+    if (!t.show) continue;
+    const m = t.mesh.instanceMatrix.array;
+    for (let i = t.off, q = 0, k = 0; i < t.off + t.n; i++, q += 16, k++) {
+      if (WAIT[i] > 0) { m[q] = m[q + 5] = m[q + 10] = 0; m[q + 13] = -500; m[q + 15] = 1; if (t === T_CTC) hp[k * 3 + 1] = -500; continue; }
+      place(S[i], Yv[i], Zv[i], o);
+      const ang = PH[i] + OM[i] * simT, c = Math.cos(ang), sn = Math.sin(ang), tt = 1 - c, ax = AX[i], ay = AY[i], az = AZ[i], sc = t.rad(A[i]);
+      m[q] = (tt * ax * ax + c) * sc; m[q + 1] = (tt * ax * ay + sn * az) * sc; m[q + 2] = (tt * ax * az - sn * ay) * sc; m[q + 3] = 0;
+      m[q + 4] = (tt * ax * ay - sn * az) * sc; m[q + 5] = (tt * ay * ay + c) * sc; m[q + 6] = (tt * ay * az + sn * ax) * sc; m[q + 7] = 0;
+      m[q + 8] = (tt * ax * az + sn * ay) * sc; m[q + 9] = (tt * ay * az - sn * ax) * sc; m[q + 10] = (tt * az * az + c) * sc; m[q + 11] = 0;
+      m[q + 12] = o.x; m[q + 13] = o.y; m[q + 14] = o.z; m[q + 15] = 1;
+      if (t === T_CTC) { hp[k * 3] = o.x; hp[k * 3 + 1] = o.y; hp[k * 3 + 2] = o.z; }
+    }
+    t.mesh.instanceMatrix.needsUpdate = true;
+  }
+  halo.geometry.attributes.position.needsUpdate = true;
+}
+
+/* ───────── Cross-section inset ───────── */
+const xs = $('xs'), xc = xs.getContext('2d');
+const css = getComputedStyle(document.documentElement);
+TYPES.forEach((t) => { t.cssCol = css.getPropertyValue(t.css).trim() || '#fff'; });
+let orbits = [], coreY = 0;
+function buildOrbits() {         // secondary-flow streamlines: contours of the computed stream function
+  const F = DEAN, n1 = F.NZ + 1; orbits = []; coreY = F.coreY;
+  for (const lv of [0.12, 0.35, 0.6, 0.85]) for (const sg of [1, -1]) {
+    const c = sg * lv * F.psiMax;
+    for (let i = 0; i < F.NY; i++) for (let j = 0; j < F.NZ; j++) {
+      const k = i * n1 + j, v = [F.psi[k] - c, F.psi[k + n1] - c, F.psi[k + n1 + 1] - c, F.psi[k + 1] - c], pts = [];
+      const cx = [i, i + 1, i + 1, i], cz = [j, j, j + 1, j + 1];
+      for (let e = 0; e < 4; e++) { const f = (e + 1) % 4; if ((v[e] > 0) !== (v[f] > 0)) { const t = v[e] / (v[e] - v[f]);
+        pts.push(-1 + 2 * (cx[e] + t * (cx[f] - cx[e])) / F.NY, -1 + 2 * (cz[e] + t * (cz[f] - cz[e])) / F.NZ); } }
+      for (let q = 0; q + 3 < pts.length; q += 4) orbits.push([pts[q], pts[q + 1], pts[q + 2], pts[q + 3]]);
+    }
+  }
+}
+function drawSection() {
+  const cw = xs.width, ch = xs.height, pad = 12, iw = cw - 2 * pad, ihh = iw * H / W, top = (ch - ihh) / 2;
+  const X = (y) => pad + (y + 1) * 0.5 * iw, Zp = (z) => top + (1 - (z + 1) * 0.5) * ihh, um = iw / (W * 1000);
+  xc.clearRect(0, 0, cw, ch);
+  xc.fillStyle = 'rgba(13,42,74,0.55)'; xc.fillRect(pad, top, iw, ihh);
+  xc.strokeStyle = 'rgba(88,199,255,0.22)'; xc.lineWidth = 1.5;
+  xc.beginPath(); for (const g of orbits) { xc.moveTo(X(g[0]), Zp(g[1])); xc.lineTo(X(g[2]), Zp(g[3])); } xc.stroke();
+  xc.fillStyle = 'rgba(88,199,255,0.5)';   // direction of the secondary flow: outward at mid-height, back along top and bottom
+  const arrow = (x, y, dir) => { xc.beginPath(); xc.moveTo(x + dir * 9, y); xc.lineTo(x - dir * 5, y - 5); xc.lineTo(x - dir * 5, y + 5); xc.fill(); };
+  arrow(X(coreY), Zp(0.08), 1); arrow(X(coreY), Zp(-0.08), 1); arrow(X(coreY), Zp(0.78), -1); arrow(X(coreY), Zp(-0.78), -1);
+  for (const t of TYPES) {
+    if (!t.show) continue;
+    xc.fillStyle = t.cssCol; xc.globalAlpha = t === T_EXO ? 0.7 : 0.92;
+    const r = Math.max(1.3, t === T_RBC ? 4 * um : t.a * 0.5 * um);
+    for (let i = t.off; i < t.off + t.n; i++) {
+      if (WAIT[i] > 0 || Math.abs(S[i] - stationS) > t.win) continue;
+      xc.beginPath(); xc.arc(X(Yv[i]), Zp(Zv[i]), t === T_EXO ? r : A[i] / t.a * r, 0, 6.2832); xc.fill();
+    }
+  }
+  xc.globalAlpha = 1; xc.strokeStyle = 'rgba(220,231,246,0.9)'; xc.lineWidth = 2; xc.strokeRect(pad, top, iw, ihh);
+  if (probe.on) drawProbe(X, Zp, um);
+}
+
+/* ───────── Tracked cell with force arrows ───────── */
+const COL = { dean: css.getPropertyValue('--channel').trim(), shear: css.getPropertyValue('--f-shear').trim(), wall: css.getPropertyValue('--f-wall').trim(), net: '#ffffff' };
+const probe = { on: true, type: T_CTC, a: 20, s: 0.01, Y: 0.85, Z: 0.3, drag: false, trail: [], f: { dy: 0, dz: 0, shy: 0, shz: 0, wy: 0, wz: 0, ny: 0, nz: 0, u: 0 } };
+function probeRelease() {
+  probe.s = 0.01; probe.trail.length = 0;
+  probe.Y = inletMode === 'sheath' ? (YS + 1) / 2 : -0.8 + 1.6 * Math.random();
+  probe.Z = (Math.random() < 0.5 ? -1 : 1) * (0.15 + 0.5 * Math.random());
+}
+function probeFields() {      // same terms as step(), kept separate so each one can be drawn
+  const j = Math.min(NT, Math.max(0, (probe.s / LS * NT) | 0)), Y = probe.Y, Z = probe.Z, f = probe.f, ul = liftVel(probe.a);
+  sampleDean(DEAN, Y, Z, _d);
+  f.dy = KD[j] * _d.vy; f.dz = KD[j] * _d.vz; f.u = Math.max(0.04, _d.u0 + EP[j] * _d.u1) * flow.U * 1000;
+  liftShape(Y, Z, _d, W, H, _l);
+  f.shy = ul * _l.shy; f.shz = ul * _l.shz;      // shear-gradient lift
+  f.wy = ul * _l.wy; f.wz = ul * _l.wz;          // wall lift
+  f.ny = f.dy + f.shy + f.wy; f.nz = f.dz + f.shz + f.wz;
+  return j;
+}
+function stepProbe(dt) {
+  const nsub = Math.max(1, Math.min(80, Math.ceil(dt / hStable))), h = dt / nsub, f = probe.f;
+  const ymax = 1 - probe.a * 1e-3 / W, zmax = 1 - probe.a * 1e-3 / H;
+  for (let k = 0; k < nsub; k++) {
+    const j = probeFields();
+    probe.Y = Math.max(-ymax, Math.min(ymax, probe.Y + f.ny * h * 2 / W));
+    probe.Z = Math.max(-zmax, Math.min(zmax, probe.Z + f.nz * h * 2 / H));
+    probe.s += f.u * h * TR[j] / (TR[j] + probe.Y * W * 0.5);
+    if (probe.s >= S_EXP - 0.05) { probeRelease(); break; }
+  }
+  const tr = probe.trail, last = tr[tr.length - 1];
+  if (!last || Math.abs(last[0] - probe.Y) + Math.abs(last[1] - probe.Z) > 0.004) { tr.push([probe.Y, probe.Z]); if (tr.length > 1500) tr.shift(); }
+}
+let lastKap = -1;
+function followStation() {
+  const f = Math.min(0.999, Math.max(0.001, probe.s / LS)); setStation(f); $('station').value = f;
+}
+function drawProbe(X, Zp, um) {
+  const px = X(probe.Y), py = Zp(probe.Z), f = probe.f, tr = probe.trail;
+  if (tr.length > 1) {
+    xc.strokeStyle = 'rgba(255,255,255,0.4)'; xc.lineWidth = 1.5; xc.beginPath();
+    tr.forEach((q, k) => (k ? xc.lineTo(X(q[0]), Zp(q[1])) : xc.moveTo(X(q[0]), Zp(q[1])))); xc.stroke();
+  }
+  const r = Math.max(5, probe.a * 0.5 * um);
+  xc.fillStyle = probe.type.cssCol; xc.beginPath(); xc.arc(px, py, r, 0, 6.2832); xc.fill();
+  xc.strokeStyle = '#fff'; xc.lineWidth = 2; xc.stroke();
+  const vref = Math.max(1e-6, UDT[Math.round(stationS / LS * NT)]);
+  const vec = (vy, vz, col, lw) => {
+    const m = Math.hypot(vy, vz); if (m < vref * 0.004) return;
+    const len = 12 + 84 * Math.tanh(0.9 * m / vref), ux = vy / m, uy = -vz / m, ex = px + ux * len, ey = py + uy * len;
+    xc.strokeStyle = xc.fillStyle = col; xc.lineWidth = lw; xc.lineCap = 'round';
+    xc.beginPath(); xc.moveTo(px, py); xc.lineTo(ex - ux * 7, ey - uy * 7); xc.stroke();
+    xc.beginPath(); xc.moveTo(ex, ey); xc.lineTo(ex - ux * 11 - uy * 5.5, ey - uy * 11 + ux * 5.5); xc.lineTo(ex - ux * 11 + uy * 5.5, ey - uy * 11 - ux * 5.5); xc.fill();
+  };
+  vec(f.dy, f.dz, COL.dean, 3); vec(f.shy, f.shz, COL.shear, 3); vec(f.wy, f.wz, COL.wall, 3); vec(f.ny, f.nz, COL.net, 4);
+}
+const pN = (v) => { const F = 9.4248 * probe.a * v; return (F >= 100 ? F.toFixed(0) : F >= 10 ? F.toFixed(1) : F.toFixed(2)) + ' pN'; };
+function forceReadout() {
+  const f = probe.f, on = probe.on;
+  $('f-dean').textContent = on ? pN(Math.hypot(f.dy, f.dz)) : '–';
+  $('f-shear').textContent = on ? pN(Math.hypot(f.shy, f.shz)) : '–';
+  $('f-wall').textContent = on ? pN(Math.hypot(f.wy, f.wz)) : '–';
+  const n = Math.hypot(f.ny, f.nz);
+  $('f-net').textContent = on ? pN(n) : '–';
+  $('o-net').textContent = on ? 'drifting ' + (n < 0.1 ? (n * 1000).toFixed(0) + ' µm/s' : n.toFixed(2) + ' mm/s') : 'off';
+  $('o-station').textContent = Math.round(stationS / LS * 100) + '%';
+}
+function setFollow(on) {
+  probe.on = on; probeMark.visible = on;
+  $('probe-follow').setAttribute('aria-pressed', String(on)); $('probe-follow').textContent = on ? 'Following the cell' : 'Follow a cell';
+  if (on) probeRelease();
+  if (mode === 'section') setView('section');
+}
+const probeMark = (function () {
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3), 3));
+  const m = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, depthTest: false,
+    uniforms: { uS: { value: 30 * dpr } },
+    vertexShader: 'uniform float uS; void main(){ gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_PointSize = uS; }',
+    fragmentShader: 'void main(){ float r = length(gl_PointCoord - 0.5) * 2.0; float a = smoothstep(0.16, 0.04, abs(r - 0.78)); gl_FragColor = vec4(1.0, 1.0, 1.0, a * 0.95); }' });
+  const pt = new THREE.Points(g, m); pt.frustumCulled = false; pt.renderOrder = 7; scene.add(pt); return pt;
+})();
+(function () {
+  const xy = (ev) => {
+    const b = xs.getBoundingClientRect(), cx = (ev.clientX - b.left) / b.width * xs.width, cy = (ev.clientY - b.top) / b.height * xs.height;
+    const pad = 12, iw = xs.width - 2 * pad, ihh = iw * H / W, top = (xs.height - ihh) / 2;
+    probe.Y = Math.max(-0.95, Math.min(0.95, (cx - pad) / iw * 2 - 1)); probe.Z = Math.max(-0.82, Math.min(0.82, 1 - (cy - top) / ihh * 2));
+    probe.trail.length = 0;
+  };
+  xs.addEventListener('pointerdown', (ev) => { if (!probe.on) setFollow(true); probe.drag = true; try { xs.setPointerCapture(ev.pointerId); } catch (e) {} xy(ev); });
+  xs.addEventListener('pointermove', (ev) => { if (probe.drag) xy(ev); });
+  const up = () => { probe.drag = false; };
+  xs.addEventListener('pointerup', up); xs.addEventListener('pointercancel', up);
+  document.querySelectorAll('#probe-sp button').forEach((b) => b.addEventListener('click', () => {
+    probe.type = TYPES.find((t) => t.key === b.dataset.probe); probe.a = probe.type.a;
+    document.querySelectorAll('#probe-sp button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    if (!probe.on) setFollow(true); else probeRelease();
+  }));
+  $('probe-follow').addEventListener('click', () => setFollow(!probe.on));
+  $('probe-release').addEventListener('click', () => { if (!probe.on) setFollow(true); else probeRelease(); });
+})();
+
+/* ───────── Readouts ───────── */
+const spRows = $('sp-rows'), outRows = $('out-rows');
+TYPES.slice().reverse().forEach((t) => {
+  const tr = document.createElement('tr');
+  tr.innerHTML = '<td><label class="sp"><input type="checkbox" id="show-' + t.key + '" checked><span class="sw" style="background:var(' + t.css + ')"></span><span class="nm">' + t.name + '</span></label></td>' +
+    '<td>' + (t.a < 1 ? '0.1' : t.a) + '</td><td id="ah-' + t.key + '">' + (t.a / (H * 1000)).toFixed(t.a < 1 ? 4 : 3) + '</td><td id="r-' + t.key + '">–</td>';
+  spRows.appendChild(tr);
+  tr.querySelector('input').addEventListener('change', (e) => { t.show = e.target.checked; t.mesh.visible = t.show; if (t === T_CTC) halo.visible = t.show; });
+  const tr2 = document.createElement('tr');
+  tr2.innerHTML = '<td><span class="sw" style="background:var(' + t.css + ')"></span>' + t.name + '</td>' + [0, 1, 2, 3].map((k) => '<td class="c"><i id="o-' + t.key + k + '">–</i></td>').join('');
+  outRows.appendChild(tr2);
+});
+function readouts() {
+  $('k-u').textContent = flow.U.toFixed(2);
+  $('k-re').textContent = flow.Re.toFixed(0);
+  const j = Math.round(stationS / LS * NT), De = flow.Re * Math.sqrt(DH / (2 * TR[j]));
+  $('k-de').textContent = De.toFixed(1);
+  $('k-ud').textContent = UDT[j].toFixed(1);
+  for (const t of TYPES) {
+    const r = liftVel(t.a) / UDT[j];
+    $('r-' + t.key).textContent = r < 0.001 ? '≈ 0' : r < 0.1 ? r.toFixed(3) : r.toFixed(2);
+    const row = tally[t.id], sum = row[0] + row[1] + row[2] + row[3];
+    for (let k = 0; k < 4; k++) {
+      const el = $('o-' + t.key + k), f = sum > 3 ? row[k] / sum : 0;
+      el.textContent = sum > 3 ? Math.round(f * 100) : '–'; el.style.setProperty('--f', f.toFixed(2));
+      row[k] *= 0.93;
+    }
+  }
+  forceReadout();
+  $('xs-where').textContent = 'loop ' + (stationS / LS * LOOPS).toFixed(1) + ' · R ' + TR[j].toFixed(1) + ' mm';
+}
+
+/* ───────── Views ───────── */
+let mode = 'chip', tween = null, rideS = 1.2;
+const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+const _a = { x: 0, y: 0, z: 0 }, _b = { x: 0, y: 0, z: 0 };
+function goto(pos, tgt, dur) { tween = { p0: camera.position.clone(), t0: controls.target.clone(), p1: pos, t1: tgt, t: 0, dur: reduceMotion ? 0.01 : (dur || 1.5) }; }
+function fitDist() {
+  const w = stage.clientWidth || 1, free = window.innerWidth > 1100 ? Math.max(0.3, (w - 672) / w) : 1;
+  return Math.max(1, 1.3 / (camera.aspect * free)) * (TR[NT] + 4.5) / 12.5;
+}
+function setView(v) {
+  mode = v; controls.autoRotate = false; controls.enabled = !(v === 'ride' || (v === 'section' && probe.on));
+  document.querySelectorAll('#views button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === v)));
+  $('labels').hidden = v === 'ride' || v === 'section';
+  const k = fitDist();
+  if (v === 'chip') goto(V3(CHIP_C.x, 27 * k, CHIP_C.z + 17 * k), CHIP_C.clone());
+  else if (v === 'outlets') { const c = V3(PE.x + PE.tx * 3.6, 0, PE.z + PE.tz * 3.6); goto(V3(c.x + 3.2 * k, 7.5 * k, c.z + 5.2 * k), c); }
+  else if (v === 'section' && probe.on) tween = null;
+  else if (v === 'section') { const c = V3(st.x, H / 2, st.z); goto(V3(st.x - st.tx * 1.25 * k + st.nx * 0.12, H / 2 + 0.5 * k, st.z - st.tz * 1.25 * k + st.nz * 0.12), c); }
+  else if (v === 'ride') { rideS = 1.2; tween = null; }
+}
+function rideCamera(dtReal, snap, sFix) {
+  if (sFix === undefined) { rideS += flow.U * 1000 * 0.9 * dtReal; if (rideS > S_OUT - 0.4) rideS = 1.2; }
+  const sc = sFix === undefined ? rideS : sFix;
+  place(Math.max(0.02, sc - 1.0), -0.15, 0, _a); place(Math.min(S_OUT - 0.2, sc + 0.55), -0.15, 0, _b);
+  const k = snap ? 1 : 0.12, hgt = camera.aspect < 1 ? 0.95 : 0.6;
+  camera.position.lerp(V3(_a.x, hgt, _a.z), k); controls.target.lerp(V3(_b.x, H / 2, _b.z), k);
+  camera.lookAt(controls.target);
+}
+
+/* ───────── UI wiring ───────── */
+let slow = 1 / 40, paused = reduceMotion, priming = 0;
+const slowFrom = (x) => Math.pow(10, -2.3 + 1.6 * x);
+function fmtSlow() { const ms = slow * 1000; $('o-slow').textContent = '1 s = ' + (ms < 10 ? ms.toFixed(1) : ms.toFixed(0)) + ' ms'; }
+$('flow').addEventListener('input', (e) => { setFlow(+e.target.value); $('o-flow').textContent = flow.Q.toFixed(2) + ' mL/min'; buildOrbits(); readouts(); });
+$('slow').addEventListener('input', (e) => { slow = slowFrom(+e.target.value); fmtSlow(); });
+$('conc').addEventListener('input', (e) => { conc = +e.target.value / 100; applyConc(); $('o-conc').textContent = e.target.value + '%'; });
+$('station').addEventListener('input', (e) => {
+  if (probe.on) setFollow(false);
+  setStation(+e.target.value); $('o-station').textContent = Math.round(e.target.value * 100) + '%'; buildOrbits(); readouts();
+  if (mode === 'section') setView('section'); if (paused) drawSection();
+});
+document.querySelectorAll('#views button').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
+document.querySelectorAll('#inlet button').forEach((b) => b.addEventListener('click', () => {
+  inletMode = b.dataset.inlet; if (probe.on) probeRelease();
+  document.querySelectorAll('#inlet button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+}));
+$('pause').addEventListener('click', () => { paused = !paused; $('pause').setAttribute('aria-pressed', String(paused)); $('pause').textContent = paused ? 'Resume' : 'Pause'; });
+$('restart').addEventListener('click', () => { seed(true); priming = 1; if (paused) $('pause').click(); });
+
+function updateSpec() {
+  $('spec').textContent = Math.round(W * 1000) + ' × ' + Math.round(H * 1000) + ' µm channel · ' + LOOPS + ' loops · R ' + R0 + ' → ' + TR[NT].toFixed(1) + ' mm · ' + Math.round(LS) + ' mm long';
+  for (const t of TYPES) $('ah-' + t.key).textContent = (t.a / (H * 1000)).toFixed(t.a < 1 ? 4 : 3);
+}
+function applyDesign() {
+  W = +$('d-w').value / 1000; H = +$('d-h').value / 1000; LOOPS = +$('d-n').value; R0 = +$('d-r').value;
+  layout(); refreshChannel(); buildChip(); setFlow(flow.Q);
+  xs.height = Math.round((xs.width - 24) * H / W) + 104;
+  setStation(+$('station').value); lastKap = -1; buildOrbits(); seed(false); probeRelease();
+  priming = 0; $('status').hidden = false;
+  updateSpec(); setView(mode); readouts();
+}
+const designLabels = () => {
+  $('o-d-w').textContent = $('d-w').value + ' µm'; $('o-d-h').textContent = $('d-h').value + ' µm';
+  $('o-d-n').textContent = $('d-n').value; $('o-d-r').textContent = (+$('d-r').value).toFixed(1) + ' mm';
+};
+['d-w', 'd-h', 'd-n', 'd-r'].forEach((id) => { $(id).addEventListener('input', designLabels); $(id).addEventListener('change', applyDesign); });
+$('d-reset').addEventListener('click', () => { $('d-w').value = 500; $('d-h').value = 130; $('d-n').value = 4; $('d-r').value = 3; designLabels(); applyDesign(); });
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight; if (!w || !h) return;
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  if (composer) { composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(w, h); }
+  shared.uHalfH.value = h * renderer.getPixelRatio() / 2;
+}
+if (window.ResizeObserver) new ResizeObserver(resize).observe(stage); else window.addEventListener('resize', resize);
+
+/* ───────── Boot and main loop ───────── */
+setFlow(1.75); slow = slowFrom(+$('slow').value); fmtSlow(); seed(false); setStation(0.5); buildOrbits(); probeRelease(); resize();
+{ const k = fitDist(); camera.position.set(CHIP_C.x, 27 * k, CHIP_C.z + 17 * k); }
+if (reduceMotion) { for (let k = 0; k < Math.ceil(primeT / 0.01); k++) step(0.01, 2.5e-4); priming = 1; $('pause').setAttribute('aria-pressed', 'true'); $('pause').textContent = 'Resume'; }
+let last = performance.now(), acc = 0;
+const perf = { n: 0, slow: 0 };
+const _v = new THREE.Vector3();
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dtWall = Math.min(0.05, (now - last) / 1000); last = now;
+  let dtReal = 0;
+  if (priming < 1) {                    // fast-forward until the first cells reach the outlets
+    for (let k = 0; k < 3; k++) step(0.01, Math.min(2.5e-4, hStable * 1.6)); simT += 0.03; priming += 0.03 / primeT;
+    if (priming >= 1) $('status').hidden = true;
+  } else if (!paused) {
+    $('status').hidden = true;
+    dtReal = Math.min(dtWall * slow, 80 * hStable); step(dtReal, hStable); simT += dtReal;
+  }
+  if (tween) {
+    tween.t = Math.min(1, tween.t + dtWall / tween.dur); const e = smooth(tween.t);
+    camera.position.lerpVectors(tween.p0, tween.p1, e); controls.target.lerpVectors(tween.t0, tween.t1, e);
+    if (tween.t >= 1) tween = null;
+  }
+  if (probe.on) {
+    if (priming >= 1 && !paused && !probe.drag) stepProbe(dtReal);
+    probeFields(); followStation();
+    place(probe.s, probe.Y, probe.Z, _a); probeMark.geometry.attributes.position.setXYZ(0, _a.x, _a.y, _a.z); probeMark.geometry.attributes.position.needsUpdate = true;
+  }
+  if (mode === 'ride') rideCamera(dtReal, false); else if (mode === 'section' && probe.on) rideCamera(0, false, probe.s); else controls.update();
+  writeScene();
+  if (composer) composer.render(dtWall); else renderer.render(scene, camera);
+  if (perf.n >= 0 && priming >= 1) { perf.n++; if (dtWall > 0.03) perf.slow++; if (perf.n >= 120) { if (perf.slow > 90 && renderer.getPixelRatio() > 1) { renderer.setPixelRatio(1); resize(); } perf.n = -1; } }
+  if (!$('labels').hidden) {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    for (const l of labels) {
+      _v.copy(l.v).project(camera);
+      const vis = _v.z < 1 && _v.x > -1.1 && _v.x < 1.1 && _v.y > -1.1 && _v.y < 1.1;
+      l.el.style.display = vis ? '' : 'none';
+      if (vis) { l.el.style.left = ((_v.x * 0.5 + 0.5) * w).toFixed(1) + 'px'; l.el.style.top = ((-_v.y * 0.5 + 0.5) * h).toFixed(1) + 'px'; }
+    }
+  }
+  drawSection();
+  acc += dtWall; if (acc > 0.25) { acc = 0; readouts(); }
+}
+readouts();
+requestAnimationFrame(frame);
+window.__design = applyDesign;
+window.__cam = { camera, controls };
+window.__probe = probe; window.__stepProbe = stepProbe;
+window.__sim = { TYPES, S, Yv, Zv, WAIT, tally, flow, step, LS, S_END };
+})();
+</script>
